@@ -1,19 +1,20 @@
 /**
  * Adaptive Alarm – Google Sheets backend (Google Apps Script)
  *
- * Paste this into Extensions › Apps Script of the team's Google Sheet,
- * then Deploy › New deployment › Web app (Execute as: Me, Who has access: Anyone).
+ * Paste this into a new Apps Script project (script.google.com), set SPREADSHEET_ID
+ * to the team Sheet's ID (from its URL), then Deploy › New deployment › Web app (Execute as: Me, Who has access: Anyone).
  * Copy the web app URL into API_URL at the top of index.html.
  *
  * One row per completed night, on a tab named "nights".
  */
 
+var SPREADSHEET_ID = '1iG_0l1zGPKChAqbeNfZAvSJ9yDaQgFjbzliKeOiMiLs'; // "CS221 Adaptive Alarm data"
 var SHEET_NAME = 'nights';
 var HEADERS = ['id', 'participant', 'bed_time', 'wake_time', 'hours_asleep', 'snoozes', 'rating',
                'bed_ms', 'wake_ms', 'tz_offset_min', 'saved_at'];
 
 function getSheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) sh = ss.insertSheet(SHEET_NAME);
   if (sh.getLastRow() === 0) {
