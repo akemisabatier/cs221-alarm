@@ -1,6 +1,6 @@
 # Adaptive Alarm
 
-CS221 (Autumn 2026) project, Impact track. A phone app that learns from your nights and recommends when to go to bed so you wake up rested.
+CS221 (Autumn 2026) project, Impact track. A phone web app that learns from your nights and recommends when to go to bed so you wake up rested.
 
 ## What it does
 
@@ -9,35 +9,63 @@ CS221 (Autumn 2026) project, Impact track. A phone app that learns from your nig
 - **Morning check-in:** log how many times you snoozed and rate how rested you feel from 1 to 10.
 - **Sleep log:** view, edit, add or delete nights.
 - **Insights:** your "sweet spot" amount of sleep, plus average rested score by time asleep and by number of snoozes.
-- **Team export:** a CSV of every participant's completed nights (labeled P1, P2, …) for training the model.
+- **Participant codes:** users join with a code (P1, P2, …), not a name or account.
 
 The recommendation is currently a simple baseline: the average time asleep on your best-rated nights, once you have logged at least 5. The team's model will replace it.
 
 ## Data collected per night
 
-| Field | Example |
+Each completed night becomes one row in the team's Google Sheet (tab `nights`):
+
+| Column | Example |
 |---|---|
-| Bedtime | 11:15 PM |
-| Wake time | 8:00 AM |
-| Number of snoozes | 1 |
-| Rested score (1–10) | 7 |
+| participant | P1 |
+| bed_time / wake_time | 2026-11-19 23:15 / 2026-11-20 08:00 |
+| hours_asleep | 8.75 |
+| snoozes | 1 |
+| rating (1–10) | 7 |
+| bed_ms / wake_ms, tz_offset_min, saved_at | raw timestamps for analysis |
 
-## How it runs
+To train the model, use File › Download › CSV in the Sheet.
 
-The app is a single file, `index.html` (HTML, CSS and vanilla JavaScript, with no build step). It is hosted as a Claude artifact, and saves data through that platform's shared database (`claude.use("db")`), so users must be signed in to Claude.
+## Architecture
 
-To use it on an iPhone, open the app link in Safari, then tap Share › Add to Home Screen.
+- `index.html`: the whole app (HTML, CSS, vanilla JavaScript, no build step), hosted on Vercel.
+- `apps-script/Code.gs`: a Google Apps Script web app that reads and writes the Google Sheet.
+- On the phone, the participant code, wake-up time and tonight's in-progress night are kept in the browser's local storage. Changes made offline are queued and uploaded when the phone is back online.
 
-**Limitation:** a web app cannot ring while the phone is locked, so users set their iPhone Clock alarm to the app's wake-up time. A native alarm (iOS AlarmKit) or a Shortcuts integration is planned.
+## Setup
 
-Opening `index.html` directly in a browser shows the interface, but nothing is saved outside the hosted version.
+### 1. Google Sheet backend (about 5 minutes, once)
 
-## Repository layout
+1. Create a new Google Sheet, for example "CS221 Adaptive Alarm data".
+2. Go to **Extensions › Apps Script**. Delete the sample code, paste in all of `apps-script/Code.gs`, and save.
+3. Click **Deploy › New deployment**. Choose the gear icon › **Web app**, then set:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+4. Click **Deploy**, approve the permissions (choose your account, then Advanced › Go to project), and copy the **Web app URL**. It ends in `/exec`.
+5. In `index.html`, replace `PASTE_YOUR_APPS_SCRIPT_URL_HERE` with that URL. Then commit.
 
-```
-index.html    the phone web app
-docs/             screenshots of the UI design (add as you go)
-```
+If you later change `Code.gs`, use **Deploy › Manage deployments › Edit › New version**, so the URL stays the same.
+
+### 2. Hosting on Vercel (about 5 minutes, once)
+
+1. Sign up at vercel.com with GitHub. The free Hobby plan is enough.
+2. **Add New › Project**, then import this repository.
+3. Leave all settings as they are (Framework preset: Other, no build command), and click **Deploy**.
+
+Every push to `main` redeploys the app automatically.
+
+### 3. On a phone
+
+Open the Vercel link in Safari, then tap Share › **Add to Home Screen**. Open it from the home screen icon and enter your participant code.
+
+The home screen app and Safari keep separate storage on iPhone, so enter your code in whichever one you use.
+
+## Limitations
+
+- **No ringing:** a web app cannot ring while the phone is locked, so users set their iPhone Clock alarm to the app's wake-up time. A native alarm (iOS AlarmKit) or a Shortcuts integration is planned.
+- **Open endpoint:** the Apps Script endpoint has no login. Anyone with its URL could add rows under any participant code. That is acceptable for a small class study, and is discussed in the report's ethical considerations.
 
 ## Team
 
