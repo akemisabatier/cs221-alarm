@@ -24,18 +24,18 @@ The recommendation is currently a simple baseline: the average time asleep on yo
 
 ## How it runs
 
-The app is a single file, `app/index.html` (HTML, CSS and vanilla JavaScript, with no build step). It is hosted as a Claude artifact, and saves data through that platform's shared database (`claude.use("db")`), so users must be signed in to Claude.
+The app is a single file, `index.html` (HTML, CSS and vanilla JavaScript, with no build step). It is hosted as a Claude artifact, and saves data through that platform's shared database (`claude.use("db")`), so users must be signed in to Claude.
 
 To use it on an iPhone, open the app link in Safari, then tap Share › Add to Home Screen.
 
 **Limitation:** a web app cannot ring while the phone is locked, so users set their iPhone Clock alarm to the app's wake-up time. A native alarm (iOS AlarmKit) or a Shortcuts integration is planned.
 
-Opening `app/index.html` directly in a browser shows the interface, but nothing is saved outside the hosted version.
+Opening `index.html` directly in a browser shows the interface, but nothing is saved outside the hosted version.
 
 ## Repository layout
 
 ```
-app/index.html    the phone web app
+index.html    the phone web app
 docs/             screenshots of the UI design (add as you go)
 ```
 
