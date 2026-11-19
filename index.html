@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Adaptive Alarm">
+<meta name="theme-color" content="#0E1220">
+<title>Adaptive Alarm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1220; --surface:#181D2E; --raised:#1E2540; --line:#262D45; --edge:#2C3558;
+    --text:#EEF0F7; --muted:#9AA3BD; --soft:#C3C9DA;
+    --amber:#F5B14C; --amber-ink:#1A1405; --good:#7DD3A8; --bad:#FF8A7A;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  body{min-height:100vh;min-height:100dvh}
+  button,input{font:inherit;color:inherit}
+  button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+  main{flex:1;padding:calc(env(safe-area-inset-top) + 24px) 20px 24px;display:flex;flex-direction:column;gap:16px}
+  h1{margin:0;font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;line-height:1.1}
+  h2{margin:0;font-size:16px;font-weight:600}
+  p{margin:0}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .eyebrow.amber{color:var(--amber)}
+  .muted{color:var(--muted)} .soft{color:var(--soft)}
+  .small{font-size:13px} .xs{font-size:12px}
+  .card{background:var(--surface);border-radius:22px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+  .card.hi{background:var(--raised);border:1px solid var(--edge)}
+  .big{font-family:'Space Grotesk',sans-serif;font-size:56px;font-weight:600;line-height:1}
+  .mid{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;line-height:1.2}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .stat{display:flex;flex-direction:column;gap:2px}
+  .stat b{font-size:20px;font-weight:600}
+  .btn{display:flex;align-items:center;justify-content:center;min-height:54px;border-radius:16px;border:none;background:var(--amber);color:var(--amber-ink);font-size:17px;font-weight:600;width:100%;padding:0 16px}
+  .btn:disabled{background:#262D45;color:var(--muted);cursor:default}
+  .btn.ghost{background:transparent;border:1px solid var(--amber);color:var(--amber)}
+  .btn.dark{background:#262D45;color:var(--text)}
+  .link{background:none;border:none;color:var(--amber);font-size:15px;font-weight:500;min-height:44px;padding:0 4px}
+  .list{background:var(--surface);border-radius:22px;padding:2px 18px}
+  .li{display:flex;align-items:center;gap:12px;min-height:56px;border-bottom:1px solid var(--line)}
+  .li:last-child{border-bottom:none}
+  .field{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-bottom:1px solid var(--line)}
+  .field:last-child{border-bottom:none}
+  input[type=datetime-local],input[type=time]{background:#0E1220;border:1px solid var(--edge);border-radius:10px;padding:8px 10px;color:var(--text);color-scheme:dark;min-height:40px;font-size:15px}
+  .step{display:flex;align-items:center;gap:10px}
+  .step button{width:44px;height:44px;border-radius:22px;border:none;background:#262D45;font-size:22px}
+  .step b{min-width:24px;text-align:center;font-size:20px}
+  .grid10{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  .grid10 button{height:58px;border-radius:16px;border:2px solid var(--line);background:var(--surface);font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600}
+  .grid10 button[aria-pressed=true]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+  .bar{height:14px;background:var(--bg);border-radius:7px;flex:1;overflow:hidden}
+  .bar i{display:block;height:14px;border-radius:7px}
+  .pill{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px;background:#262D45;color:var(--soft)}
+  .notice{background:#2A2418;border:1px solid #4A3A1C;border-radius:16px;padding:12px 14px;font-size:14px;line-height:1.45;color:#F3DDB4}
+  .chart{height:110px;display:flex;align-items:flex-end;gap:8px}
+  .chart div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .chart span{font-size:11px;color:var(--soft);font-weight:600}
+  .chart i{display:block;width:100%;border-radius:6px}
+  nav{position:sticky;bottom:0;background:#121729;border-top:1px solid #232A40;display:flex;justify-content:space-around;padding:8px 0 calc(env(safe-area-inset-bottom) + 8px)}
+  nav button{background:none;border:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:500;width:88px;min-height:48px}
+  nav button[aria-current=page]{color:var(--amber)}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 92px);background:#EEF0F7;color:#0E1220;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:500;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
+  .toast.on{opacity:1}
+  .sleeping-orb{width:200px;height:200px;border-radius:100px;background:#1A2142;display:flex;align-items:center;justify-content:center;align-self:center}
+  .sleeping-orb div{width:140px;height:140px;border-radius:70px;background:#262F5A;display:flex;align-items:center;justify-content:center}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  textarea{width:100%;min-height:120px;background:#0E1220;border:1px solid var(--edge);border-radius:12px;color:var(--soft);font:12px/1.4 ui-monospace,Menlo,monospace;padding:10px}
+</style>
+</head>
+<body>
+<div class="app">
+  <main id="view" aria-live="polite"><p class="muted">Loading…</p></main>
+  <nav aria-label="Tabs">
+    <button data-tab="home"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2M5 4 2 7M19 4l3 3"/></svg>Tonight</button>
+    <button data-tab="log"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Log</button>
+    <button data-tab="insights"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>Insights</button>
+    <button data-tab="team"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.6.8 2.6 2.6 3 5.2"/></svg>Team</button>
+  </nav>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  // ---------- state ----------
+  var S = {
+    db: null, user: null, uid: null, canWrite: true,
+    ready: false, offline: false, unavailable: false,
+    nights: [],            // this viewer's entries, newest first
+    profile: null,         // nights/<uid> doc data
+    tab: 'home',
+    checkin: null,         // {id, bedAt, wakeAt, snoozes, rating}
+    confirmDelete: null,
+    team: null, teamLoading: false
+  };
+  var view = document.getElementById('view');
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmtTime(ms) { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+  function fmtDay(ms) { return new Date(ms).toLocaleDateString([], { weekday: 'short' }); }
+  function fmtDate(ms) { return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+  function fmtDur(min) { min = Math.max(0, Math.round(min)); return Math.floor(min / 60) + 'h ' + (min % 60) + 'm'; }
+  function hoursOf(n) { return (n.wakeAt - n.bedAt) / 3600000; }
+  function toLocalInput(ms) {
+    var d = new Date(ms), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function fromLocalInput(v) { var t = new Date(v).getTime(); return isNaN(t) ? null : t; }
+  function rateColor(r) { return r >= 8 ? 'var(--good)' : (r >= 6 ? 'var(--amber)' : 'var(--bad)'); }
+  var toastT;
+  function toast(msg) { var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('on'); }, 2600); }
+  function done() { return S.nights.filter(function (n) { return n.status === 'done' && n.wakeAt && n.rating; }); }
+  function active() { return S.nights.find(function (n) { return n.status === 'sleeping'; }) || null; }
+  function entries() { return S.db.collection('nights/' + S.uid + '/entries'); }
+  function writeFailed(e) {
+    if (e && e.code === 'invalid_argument') { S.canWrite = false; toast('You can view but not save here. Ask Akemi for Contributor access.'); }
+    else if (e && e.code === 'quota_exceeded') toast('Storage is full. Tell Akemi.');
+    else toast('Could not save. Check your connection and try again.');
+    render();
+  }
+
+  // ---------- model (baseline; the team model can replace this) ----------
+  var MIN_NIGHTS = 5, DEFAULT_HOURS = 8;
+  function model() {
+    var d = done();
+    if (d.length < MIN_NIGHTS) return { ready: false, n: d.length, hours: DEFAULT_HOURS };
+    // Sweet spot = average time asleep on your best-rated nights (top half by rating)
+    var sorted = d.slice().sort(function (a, b) { return b.rating - a.rating; });
+    var top = sorted.slice(0, Math.ceil(sorted.length / 2));
+    var hrs = top.reduce(function (s, n) { return s + hoursOf(n); }, 0) / top.length;
+    hrs = Math.min(10.5, Math.max(6, hrs));
+    return { ready: true, n: d.length, hours: hrs, top: top.length };
+  }
+  function bucketAvg(list, keyFn, buckets) {
+    return buckets.map(function (b) {
+      var xs = list.filter(function (n) { return b.test(keyFn(n)); });
+      var avg = xs.length ? xs.reduce(function (s, n) { return s + n.rating; }, 0) / xs.length : null;
+      return { label: b.label, avg: avg, count: xs.length };
+    });
+  }
+  function wakeTargetMin() {
+    var t = (S.profile && S.profile.wakeTarget) || '08:00';
+    var p = t.split(':'); return (+p[0]) * 60 + (+p[1]);
+  }
+  function minToLabel(m) {
+    m = ((m % 1440) + 1440) % 1440; var d = new Date(2000, 0, 1, Math.floor(m / 60), m % 60);
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  // ---------- views ----------
+  function vHome() {
+    var a = active(), m = model(), last = done()[0];
+    if (a) {
+      var mins = (Date.now() - a.bedAt) / 60000;
+      return '<p class="eyebrow amber">Sleeping</p>' +
+        '<h1>Good night</h1>' +
+        '<div class="sleeping-orb" aria-hidden="true"><div><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#C3C9DA" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg></div></div>' +
+        '<div class="card"><div class="row"><span class="muted">In bed since</span><b>' + fmtTime(a.bedAt) + '</b></div>' +
+        '<div class="row"><span class="muted">So far</span><b>' + fmtDur(mins) + '</b></div>' +
+        '<div class="row"><span class="muted">Your iPhone alarm</span><b>' + minToLabel(wakeTargetMin()) + '</b></div></div>' +
+        '<div style="flex:1"></div>' +
+        '<button class="btn" data-act="wake">I’m awake</button>' +
+        '<button class="link" data-act="cancelNight">I’m not going to sleep yet</button>';
+    }
+    var bedBy = minToLabel(wakeTargetMin() - Math.round(m.hours * 60 / 5) * 5);
+    var html = '<div><p class="eyebrow">' + esc(new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })) + '</p>' +
+      '<h1>Plan tonight</h1></div>';
+    html += '<div class="card"><div class="row"><label for="wakeT" class="muted">Wake-up time</label>' +
+      '<input id="wakeT" type="time" value="' + esc((S.profile && S.profile.wakeTarget) || '08:00') + '"></div>' +
+      '<p class="small muted">Set the same time on your iPhone’s Clock alarm. This app logs your night and learns from it.</p></div>';
+    html += '<div class="card hi"><p class="eyebrow amber">' + (m.ready ? 'Tonight’s recommendation' : 'Starting point') + '</p>' +
+      '<p class="mid">Go to bed by ' + esc(bedBy) + '</p>' +
+      '<div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+      '<div class="stat"><span class="xs muted">Time asleep</span><b>' + fmtDur(m.hours * 60) + '</b></div>' +
+      '<div class="stat"><span class="xs muted">Based on</span><b>' + (m.ready ? m.n + ' nights' : 'Default') + '</b></div></div>' +
+      (m.ready ? '' : '<p class="small soft">Log ' + (MIN_NIGHTS - m.n) + ' more night' + (MIN_NIGHTS - m.n === 1 ? '' : 's') + ' for a personal recommendation.</p>') +
+      '</div>';
+    html += '<button class="btn" data-act="bed"' + (S.canWrite ? '' : ' disabled') + '>Going to bed</button>';
+    if (last) {
+      html += '<div class="card"><div class="row"><h2>Last night</h2><button class="link" data-tab-go="log">See log</button></div>' +
+        '<div class="stats"><div class="stat"><b>' + fmtDur(hoursOf(last) * 60) + '</b><span class="xs muted">Asleep</span></div>' +
+        '<div class="stat"><b>' + last.snoozes + '</b><span class="xs muted">Snoozes</span></div>' +
+        '<div class="stat"><b>' + last.rating + ' / 10</b><span class="xs muted">Rested</span></div></div></div>';
+    }
+    return html;
+  }
+
+  function vCheckin() {
+    var c = S.checkin, nums = '';
+    for (var i = 1; i <= 10; i++) nums += '<button type="button" data-rate="' + i + '" aria-pressed="' + (c.rating === i) + '">' + i + '</button>';
+    var valid = c.bedAt && c.wakeAt && c.wakeAt > c.bedAt && c.rating;
+    var warn = (c.bedAt && c.wakeAt && c.wakeAt <= c.bedAt) ? '<p class="small" style="color:var(--bad)">Wake time must be after bedtime.</p>' : '';
+    return '<div class="row"><button class="link" data-act="closeCheckin">Cancel</button><span></span></div>' +
+      '<div><p class="eyebrow amber">' + (c.id ? 'Morning check-in' : 'Add a night') + '</p><h1>How rested do you feel?</h1></div>' +
+      '<fieldset style="border:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"><legend class="sr">Rested from 1 to 10</legend>' +
+      '<div class="grid10">' + nums + '</div>' +
+      '<div class="row"><span class="xs muted">Exhausted</span><span class="xs muted">Fully rested</span></div></fieldset>' +
+      '<div class="card" style="padding:4px 20px;gap:0">' +
+      '<div class="field"><label for="bedIn">Went to sleep</label><input id="bedIn" type="datetime-local" value="' + (c.bedAt ? toLocalInput(c.bedAt) : '') + '"></div>' +
+      '<div class="field"><label for="wakeIn">Woke up</label><input id="wakeIn" type="datetime-local" value="' + (c.wakeAt ? toLocalInput(c.wakeAt) : '') + '"></div>' +
+      '<div class="field"><span id="snzL">Snoozes</span><div class="step" role="group" aria-labelledby="snzL"><button type="button" data-act="snzMinus" aria-label="One fewer snooze">−</button><b>' + c.snoozes + '</b><button type="button" data-act="snzPlus" aria-label="One more snooze">+</button></div></div>' +
+      '</div>' + warn +
+      (c.bedAt && c.wakeAt && c.wakeAt > c.bedAt ? '<p class="small muted">Time asleep ' + fmtDur((c.wakeAt - c.bedAt) / 60000) + '</p>' : '') +
+      '<div style="flex:1"></div>' +
+      '<button class="btn" data-act="saveCheckin"' + (valid && S.canWrite ? '' : ' disabled') + '>' + (c.rating ? 'Save ' + c.rating + ' / 10' : 'Pick a number to save') + '</button>' +
+      (c.id ? (S.confirmDelete === c.id
+        ? '<div class="row"><span class="small soft">Delete this night for good?</span><span><button class="link" data-act="noDelete">Keep</button><button class="link" style="color:var(--bad)" data-del="' + esc(c.id) + '">Delete</button></span></div>'
+        : '<button class="link" style="color:var(--bad)" data-act="askDelete">Delete this night</button>') : '');
+  }
+
+  function vLog() {
+    var list = S.nights.filter(function (n) { return n.status === 'done'; });
+    var html = '<div class="row"><h1>Sleep log</h1><button class="link" data-act="addNight"' + (S.canWrite ? '' : ' disabled') + '>+ Add night</button></div>';
+    if (!list.length) return html + '<div class="card"><h2>No nights yet</h2><p class="small soft">Tap “Going to bed” tonight and do the check-in when you wake. Forgot? Use “Add night”.</p></div>';
+    var recent = list.slice(0, 14).reverse();
+    html += '<div class="card"><div class="row"><h2>Rested score</h2><span class="pill">Last ' + recent.length + '</span></div><div class="chart" aria-hidden="true">' +
+      recent.map(function (n) { return '<div><span>' + n.rating + '</span><i style="height:' + (n.rating * 8) + 'px;background:' + rateColor(n.rating) + '"></i></div>'; }).join('') +
+      '</div></div>';
+    html += '<div class="list">' + list.map(function (n) {
+      var row = '<div class="li">' +
+        '<div style="width:56px;display:flex;flex-direction:column"><b class="small">' + fmtDay(n.wakeAt) + '</b><span class="xs muted">' + fmtDate(n.wakeAt) + '</span></div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;min-width:0"><span class="small">' + fmtDur(hoursOf(n) * 60) + ' · ' + n.snoozes + ' snooze' + (n.snoozes === 1 ? '' : 's') + '</span><span class="xs muted">' + fmtTime(n.bedAt) + ' – ' + fmtTime(n.wakeAt) + '</span></div>' +
+        '<b style="font-family:Space Grotesk,sans-serif;font-size:17px;color:' + rateColor(n.rating) + '">' + n.rating + '/10</b>' +
+        '<button class="link small" data-edit="' + esc(n.id) + '" aria-label="Edit night of ' + esc(fmtDate(n.wakeAt)) + '">Edit</button></div>';
+      return row;
+    }).join('') + '</div>';
+    return html;
+  }
+
+  function vInsights() {
+    var d = done(), m = model();
+    var html = '<h1>Insights</h1>';
+    html += '<div class="card hi"><p class="eyebrow amber">Your sweet spot</p>' +
+      '<p class="big" style="font-size:44px">' + (m.ready ? fmtDur(m.hours * 60) : '—') + '</p>' +
+      '<p class="small soft">' + (m.ready
+        ? 'The average time asleep on your ' + m.top + ' best-rated nights. For a ' + minToLabel(wakeTargetMin()) + ' wake-up, aim for bed by ' + minToLabel(wakeTargetMin() - Math.round(m.hours * 12) * 5) + '.'
+        : 'Log ' + (MIN_NIGHTS - m.n) + ' more night' + (MIN_NIGHTS - m.n === 1 ? '' : 's') + ' to see your sweet spot. ' + m.n + ' logged so far.') + '</p></div>';
+    if (!d.length) return html;
+    function bars(title, rows) {
+      return '<div class="card"><h2>' + title + '</h2>' + rows.map(function (r) {
+        return '<div class="row" style="gap:10px"><span class="small muted" style="width:92px">' + r.label + '</span>' +
+          '<div class="bar">' + (r.avg ? '<i style="width:' + (r.avg * 10) + '%;background:' + rateColor(r.avg) + '"></i>' : '') + '</div>' +
+          '<b class="small" style="width:52px;text-align:right">' + (r.avg ? r.avg.toFixed(1) : '–') + '</b></div>' +
+          '<p class="xs muted" style="margin-top:-8px;padding-left:102px">' + r.count + ' night' + (r.count === 1 ? '' : 's') + '</p>';
+      }).join('') + '</div>';
+    }
+    html += bars('Avg rested score by time asleep', bucketAvg(d, hoursOf, [
+      { label: 'Under 7h', test: function (h) { return h < 7; } },
+      { label: '7h to 8h', test: function (h) { return h >= 7 && h < 8; } },
+      { label: '8h to 9h', test: function (h) { return h >= 8 && h < 9; } },
+      { label: '9h or more', test: function (h) { return h >= 9; } }
+    ]));
+    html += bars('Avg rested score by snoozes', bucketAvg(d, function (n) { return n.snoozes; }, [
+      { label: 'No snoozes', test: function (s) { return s === 0; } },
+      { label: '1 snooze', test: function (s) { return s === 1; } },
+      { label: '2 or more', test: function (s) { return s >= 2; } }
+    ]));
+    html += '<div class="card"><h2>How this works</h2><p class="small soft" style="line-height:1.5">Each night records when you went to sleep, when you woke up, how many times you snoozed, and your 1 to 10 check-in. The recommendation is a simple baseline for now and will be replaced by the team’s model.</p></div>';
+    return html;
+  }
+
+  function vTeam() {
+    var html = '<h1>Team data</h1>' +
+      '<div class="card"><h2>Who can see what</h2><p class="small soft" style="line-height:1.5">Everyone on this project can read the nights logged here, so the team can train the model on pooled data. Only you can change your own nights. Exports label people as P1, P2, P3, not by name.</p></div>';
+    html += '<div class="card"><h2>Export for the model</h2><p class="small muted">One row per completed night: participant, bedtime, wake time, hours, snoozes, rating.</p>';
+    if (S.teamLoading) html += '<p class="small muted">Gathering everyone’s nights…</p>';
+    else if (S.team) {
+      html += '<p class="small soft">' + S.team.rows + ' nights from ' + S.team.people + ' participant' + (S.team.people === 1 ? '' : 's') + '.</p>' +
+        '<label for="csv" class="sr">CSV data</label><textarea id="csv" readonly>' + esc(S.team.csv) + '</textarea>' +
+        '<div class="row" style="gap:10px"><button class="btn dark" data-act="copyCsv">Copy CSV</button>' +
+        (S.downloads ? '<button class="btn" data-act="saveCsv">Download</button>' : '') + '</div>';
+    } else html += '<button class="btn ghost" data-act="loadTeam">Build CSV</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function vGate(msg) {
+    return '<h1>Adaptive Alarm</h1><div class="notice">' + msg + '</div>';
+  }
+
+  // ---------- render ----------
+  function render() {
+    var html;
+    if (S.unavailable) html = vGate('Saving isn’t available in this view. Open this page while signed in to Claude (in Safari or the Claude app), then try again.');
+    else if (!S.ready) html = S.offline ? vGate('Can’t reach your saved nights yet. Check your connection; this will update by itself.') : '<p class="muted">Loading your nights…</p>';
+    else if (S.checkin) html = vCheckin();
+    else html = ({ home: vHome, log: vLog, insights: vInsights, team: vTeam })[S.tab]();
+    if (S.ready && !S.canWrite && !S.checkin) html = '<div class="notice">You can view this app but not save nights. Ask Akemi to share it with you as a Contributor.</div>' + html;
+    view.innerHTML = html;
+    document.querySelectorAll('nav button').forEach(function (b) {
+      if (b.dataset.tab === S.tab && !S.checkin) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    document.querySelector('nav').style.display = S.checkin ? 'none' : 'flex';
+  }
+
+  // ---------- actions ----------
+  function startCheckin(n) {
+    S.checkin = { id: n ? n.id : null, bedAt: n ? n.bedAt : null, wakeAt: n ? (n.wakeAt || Date.now()) : null, snoozes: n ? (n.snoozes || 0) : 0, rating: n ? (n.rating || 0) : 0 };
+    render(); window.scrollTo(0, 0);
+  }
+  var busy = false;
+  function act(name, el) {
+    var c = S.checkin;
+    switch (name) {
+      case 'bed':
+        if (busy) return; busy = true;
+        entries().add({ bedAt: Date.now(), wakeAt: null, snoozes: 0, rating: null, status: 'sleeping', tzOffset: new Date().getTimezoneOffset(), createdAt: Date.now() })
+          .then(function () { toast('Logged. Sleep well.'); }).catch(writeFailed).then(function () { busy = false; });
+        return;
+      case 'wake': { var a = active(); if (a) startCheckin(a); return; }
+      case 'cancelNight': { var a2 = active(); if (a2) entries().doc(a2.id).delete().catch(writeFailed); return; }
+      case 'closeCheckin': S.checkin = null; S.confirmDelete = null; render(); return;
+      case 'snzMinus': c.snoozes = Math.max(0, c.snoozes - 1); render(); return;
+      case 'snzPlus': c.snoozes = Math.min(20, c.snoozes + 1); render(); return;
+      case 'addNight': {
+        var w = new Date(); w.setHours(Math.floor(wakeTargetMin() / 60), wakeTargetMin() % 60, 0, 0);
+        startCheckin(null); S.checkin.wakeAt = w.getTime(); S.checkin.bedAt = w.getTime() - 8 * 3600000; render(); return;
+      }
+      case 'saveCheckin': {
+        if (busy || !(c.bedAt && c.wakeAt && c.wakeAt > c.bedAt && c.rating)) return; busy = true;
+        var body = { bedAt: c.bedAt, wakeAt: c.wakeAt, snoozes: c.snoozes, rating: c.rating, status: 'done', tzOffset: new Date(c.wakeAt).getTimezoneOffset(), updatedAt: Date.now() };
+        var p = c.id ? entries().doc(c.id).update(body) : entries().add(Object.assign({ createdAt: Date.now() }, body));
+        p.then(function () { S.checkin = null; S.tab = 'log'; render(); toast('Saved. Thanks!'); }).catch(writeFailed).then(function () { busy = false; });
+        return;
+      }
+      case 'noDelete': S.confirmDelete = null; render(); return;
+      case 'askDelete': S.confirmDelete = c.id; render(); return;
+      case 'loadTeam': loadTeam(); return;
+      case 'copyCsv':
+        navigator.clipboard.writeText(S.team.csv).then(function () { toast('CSV copied'); }, function () {
+          var t = document.getElementById('csv'); t.focus(); t.select(); toast('Select all and copy from the box');
+        });
+        return;
+      case 'saveCsv':
+        S.downloads.save({ filename: 'adaptive-alarm-nights.csv', data: S.team.csv }).then(function () { toast('Saved'); }, function () { toast('Download cancelled'); });
+        return;
+    }
+  }
+
+  function loadTeam() {
+    S.teamLoading = true; render();
+    S.db.collection('nights').get().then(function (snap) {
+      var people = snap.docs.slice().sort(function (a, b) { return ((a.data() || {}).joinedAt || 0) - ((b.data() || {}).joinedAt || 0); });
+      return Promise.all(people.map(function (p) { return S.db.collection('nights/' + p.id + '/entries').get(); }))
+        .then(function (snaps) {
+          var lines = ['participant,bed_time,wake_time,hours_asleep,snoozes,rating'], rows = 0;
+          snaps.forEach(function (s, i) {
+            s.docs.map(function (d) { return d.data(); })
+              .filter(function (n) { return n && n.status === 'done' && n.bedAt && n.wakeAt && n.rating; })
+              .sort(function (a, b) { return a.bedAt - b.bedAt; })
+              .forEach(function (n) {
+                rows++;
+                lines.push(['P' + (i + 1), new Date(n.bedAt).toISOString(), new Date(n.wakeAt).toISOString(), ((n.wakeAt - n.bedAt) / 3600000).toFixed(2), n.snoozes || 0, n.rating].join(','));
+              });
+          });
+          S.team = { csv: lines.join('\n'), rows: rows, people: people.length };
+        });
+    }).catch(function () { toast('Could not load team data'); }).then(function () { S.teamLoading = false; render(); });
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button'); if (!t || t.disabled) return;
+    if (t.dataset.tab) { S.tab = t.dataset.tab; S.confirmDelete = null; render(); window.scrollTo(0, 0); return; }
+    if (t.dataset.tabGo) { S.tab = t.dataset.tabGo; render(); return; }
+    if (t.dataset.rate) { S.checkin.rating = +t.dataset.rate; render(); return; }
+    if (t.dataset.edit) {
+      var n = S.nights.find(function (x) { return x.id === t.dataset.edit; });
+      if (n) { startCheckin(n); }
+      return;
+    }
+    if (t.dataset.del) {
+      entries().doc(t.dataset.del).delete().then(function () { S.confirmDelete = null; S.checkin = null; render(); toast('Deleted'); }).catch(writeFailed);
+      return;
+    }
+    if (t.dataset.act) act(t.dataset.act, t);
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'bedIn') { S.checkin.bedAt = fromLocalInput(t.value); render(); }
+    if (t.id === 'wakeIn') { S.checkin.wakeAt = fromLocalInput(t.value); render(); }
+    if (t.id === 'wakeT' && t.value && S.canWrite) {
+      var prev = (S.profile && S.profile.wakeTarget) || '08:00';
+      if (t.value === prev) return;
+      S.profile = Object.assign({}, S.profile, { wakeTarget: t.value }); render();
+      S.db.doc('nights/' + S.uid).set(Object.assign({}, S.profile)).catch(writeFailed);
+    }
+  });
+
+  // ---------- boot ----------
+  render();
+  Promise.all([
+    window.claude ? window.claude.use('db') : Promise.resolve(null),
+    window.claude ? window.claude.use('user') : Promise.resolve(null),
+    window.claude ? window.claude.use('downloads') : Promise.resolve(null)
+  ]).then(function (r) {
+    S.db = r[0]; S.user = r[1]; S.downloads = r[2];
+    if (!S.db || !S.user) { S.unavailable = true; render(); return; }
+    return S.user.id().then(function (id) {
+      if (!id) { S.unavailable = true; render(); return; }
+      S.uid = id;
+      Promise.resolve(S.user.can ? S.user.can('data.write') : null).then(function (w) { if (w === false) { S.canWrite = false; render(); } });
+
+      var timer = setTimeout(function () { if (!S.ready) { S.offline = true; render(); } }, 10000);
+      // profile / participant doc
+      var pref = S.db.doc('nights/' + id);
+      pref.get().then(function (snap) {
+        if (snap.exists) { S.profile = snap.data(); render(); }
+        else if (S.canWrite) {
+          S.profile = { joinedAt: Date.now(), wakeTarget: '08:00' };
+          pref.set(S.profile).catch(function (e) { if (e && e.code === 'invalid_argument') { S.canWrite = false; render(); } });
+        }
+      }).catch(function () {});
+      // this viewer's nights
+      entries().orderBy('bedAt', 'desc').limit(400).onSnapshot(function (snap) {
+        S.nights = snap.docs.map(function (d) { var x = Object.assign({ id: d.id }, d.data()); return x; });
+        if (!snap.metadata.fromCache) { clearTimeout(timer); S.offline = false; }
+        S.ready = true; render();
+      }, function () { clearTimeout(timer); S.ready = true; render(); toast('Lost connection to saved nights. Reopen the app.'); });
+    });
+  }).catch(function () { S.unavailable = true; render(); });
+
+  // Keep "So far" fresh while sleeping
+  setInterval(function () { if (S.ready && S.tab === 'home' && !S.checkin && active()) render(); }, 60000);
+})();
+</script>
+</body>
+</html>
