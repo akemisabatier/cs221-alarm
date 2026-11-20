@@ -93,9 +93,12 @@
 <script>
 (function () {
   // =====================================================================
-  // CONFIG: paste your Google Apps Script web app URL here (see README).
+  // CONFIG: address of the backend API (see README).
+  // '' means "same server that served this page" (the default: the backend
+  // serves this app). If the app is hosted elsewhere, e.g. Vercel, put the
+  // backend's full address here, like 'https://my-backend.example.com'.
   // =====================================================================
-  var API_URL = 'https://script.google.com/macros/s/AKfycbzdTF_xXQkeeK0Nx3CNh5kB_crK0yon4MNz6fvMl_SipgBZ-mvp5AObsdto192ldmQIug/exec';
+  var API_URL = '';
 
   var LS = {
     participant: 'aa_participant',
@@ -116,9 +119,9 @@
     nights: lsGet(LS.cache, []),               // newest first
     loading: false, loadError: false,
     tab: 'home', checkin: null, confirmDelete: null,
-    queue: lsGet(LS.queue, [])
+    queue: lsGet(LS.queue, []),
+    rec: null                                   // latest recommendation from the server
   };
-  var configured = /^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL);
   var view = document.getElementById('view');
 
   // ---------- helpers ----------
@@ -148,34 +151,55 @@
   }
   function sortNights() { S.nights.sort(function (a, b) { return b.bedAt - a.bedAt; }); }
 
-  // ---------- API (Google Apps Script) ----------
-  function apiGet(params) {
-    var q = Object.keys(params).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
-    return fetch(API_URL + '?' + q).then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) throw new Error(j.error || 'error'); return j; });
+  // ---------- API (FastAPI backend) ----------
+  function api(method, path, body) {
+    var opts = { method: method, headers: {} };
+    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    return fetch(API_URL + path, opts).then(function (r) {
+      if (!r.ok) { var e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+      return r.json();
+    });
   }
-  function apiPost(body) {
-    // text/plain avoids a CORS preflight, which Apps Script cannot answer
-    return fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) throw new Error(j.error || 'error'); return j; });
+  function nightPath(p, id) { return '/nights/' + encodeURIComponent(p) + '/' + encodeURIComponent(id); }
+  // A queued change is {action:'upsert', participant, night, tzOffset} or {action:'delete', participant, id}.
+  function sendOp(op) {
+    if (op.action === 'delete') return api('DELETE', nightPath(op.participant, op.id));
+    var n = op.night;
+    return api('PUT', nightPath(op.participant, n.id),
+      { bedAt: n.bedAt, wakeAt: n.wakeAt, snoozes: n.snoozes, rating: n.rating, tzOffset: op.tzOffset || 0 });
   }
+  // The server refused this change itself (not a connection problem), so retrying can never succeed.
+  function isRejected(e) { return e && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429; }
   function enqueue(op) { S.queue.push(op); lsSet(LS.queue, S.queue); }
   var flushing = false;
   function flushQueue() {
-    if (flushing || !S.queue.length || !configured) return Promise.resolve();
+    if (flushing || !S.queue.length) return Promise.resolve();
     flushing = true;
     var op = S.queue[0];
-    return apiPost(op).then(function () {
+    return sendOp(op).then(function () {
       S.queue.shift(); lsSet(LS.queue, S.queue); flushing = false;
-      if (!S.queue.length) render();
+      if (!S.queue.length) { render(); loadRecommendation(); }
       return flushQueue();
-    }, function () { flushing = false; render(); });
+    }, function (e) {
+      flushing = false;
+      if (isRejected(e)) {
+        // Drop it so it doesn't block everything behind it.
+        S.queue.shift(); lsSet(LS.queue, S.queue);
+        toast('The server rejected one change, so it was skipped.');
+        return flushQueue();
+      }
+      render();
+    });
+  }
+  function fromServer(r) {
+    return { id: String(r.client_id), bedAt: +r.bed_ms, wakeAt: +r.wake_ms, snoozes: +r.snoozes || 0, rating: +r.restedness };
   }
   function loadNights() {
-    if (!configured || !S.participant) return;
+    if (!S.participant) return;
     S.loading = true; S.loadError = false; render();
-    flushQueue().then(function () { return apiGet({ action: 'list', participant: S.participant }); })
+    flushQueue().then(function () { return api('GET', '/nights/' + encodeURIComponent(S.participant)); })
       .then(function (j) {
-        var server = (j.nights || []).map(function (n) { return { id: n.id, bedAt: +n.bedAt, wakeAt: +n.wakeAt, snoozes: +n.snoozes || 0, rating: +n.rating }; });
+        var server = (j.nights || []).map(fromServer);
         // keep queued (not yet sent) changes on top of server data
         S.queue.forEach(function (op) {
           if (op.action === 'upsert') { server = server.filter(function (n) { return n.id !== op.night.id; }); server.push(op.night); }
@@ -183,8 +207,18 @@
         });
         S.nights = server; sortNights(); lsSet(LS.cache, S.nights);
         S.loading = false; render();
+        loadRecommendation();
       })
       .catch(function () { S.loading = false; S.loadError = true; render(); });
+  }
+  // Ask the team's model for tonight's bedtime. If it can't be reached, the local baseline below is used.
+  var recSeq = 0;
+  function loadRecommendation() {
+    if (!S.participant) return;
+    var seq = ++recSeq, wake = S.wakeTarget || '08:00';
+    api('GET', '/recommendation/' + encodeURIComponent(S.participant) + '?wake_time=' + encodeURIComponent(wake))
+      .then(function (r) { if (seq === recSeq) { S.rec = r; render(); } })
+      .catch(function () { /* keep showing the local baseline */ });
   }
 
   // ---------- model (baseline; the team model can replace this) ----------
@@ -197,6 +231,21 @@
     var hrs = top.reduce(function (s, n) { return s + hoursOf(n); }, 0) / top.length;
     return { ready: true, n: d.length, hours: Math.min(10.5, Math.max(6, hrs)), top: top.length };
   }
+  // What "Plan tonight" shows: the server's recommendation when we have one for the current
+  // wake-up time and this phone's nights are all uploaded, otherwise the local baseline.
+  function plan() {
+    var r = S.rec;
+    if (r && r.wake_time === (S.wakeTarget || '08:00') && !S.queue.length && isFinite(r.target_sleep_hours)) {
+      var p = r.suggested_bedtime.split(':');
+      return { ready: r.method !== 'default_8h', n: r.nights_logged, hours: r.target_sleep_hours,
+               bedMin: (+p[0]) * 60 + (+p[1]), need: r.nights_until_personalized,
+               src: r.method === 'experimental_mdp' ? 'model' : 'default' };
+    }
+    var m = model();
+    return { ready: m.ready, n: m.n, hours: m.hours, need: Math.max(0, MIN_NIGHTS - m.n),
+             bedMin: wakeTargetMin() - Math.round(m.hours * 12) * 5, top: m.top,
+             src: m.ready ? 'baseline' : 'default' };
+  }
   function bucketAvg(list, keyFn, buckets) {
     return buckets.map(function (b) {
       var xs = list.filter(function (n) { return b.test(keyFn(n)); });
@@ -205,9 +254,6 @@
   }
 
   // ---------- views ----------
-  function vSetup() {
-    return '<h1>Adaptive Alarm</h1><div class="notice">This copy isn’t connected to a Google Sheet yet. Paste the Apps Script web app URL into <b>API_URL</b> at the top of the script in index.html (see the README), then redeploy.</div>';
-  }
   function vJoin() {
     return '<div><p class="eyebrow amber">Welcome</p><h1>Adaptive Alarm</h1></div>' +
       '<div class="card"><p class="soft" style="line-height:1.5">Each night you log when you went to sleep and woke up, how often you snoozed, and how rested you feel. Over time the app learns how much sleep you need and recommends a bedtime.</p></div>' +
@@ -220,7 +266,7 @@
   }
 
   function vHome() {
-    var a = S.active, m = model(), last = done()[0];
+    var a = S.active, m = plan(), last = done()[0];
     if (a) {
       var mins = (Date.now() - a.bedAt) / 60000;
       return '<p class="eyebrow amber">Sleeping</p><h1>Good night</h1>' +
@@ -232,7 +278,7 @@
         '<button class="btn" data-act="wake">I’m awake</button>' +
         '<button class="link" data-act="cancelNight">I’m not going to sleep yet</button>';
     }
-    var bedBy = minToLabel(wakeTargetMin() - Math.round(m.hours * 12) * 5);
+    var bedBy = minToLabel(m.bedMin);
     var html = '<div><p class="eyebrow">' + esc(new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })) + '</p><h1>Plan tonight</h1></div>';
     html += '<div class="card"><div class="row"><label for="wakeT" class="muted">Wake-up time</label>' +
       '<input id="wakeT" type="time" value="' + esc(S.wakeTarget) + '"></div>' +
@@ -242,7 +288,7 @@
       '<div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
       '<div class="stat"><span class="xs muted">Time asleep</span><b>' + fmtDur(m.hours * 60) + '</b></div>' +
       '<div class="stat"><span class="xs muted">Based on</span><b>' + (m.ready ? m.n + ' nights' : 'Default') + '</b></div></div>' +
-      (m.ready ? '' : '<p class="small soft">Log ' + (MIN_NIGHTS - m.n) + ' more night' + (MIN_NIGHTS - m.n === 1 ? '' : 's') + ' for a personal recommendation.</p>') + '</div>';
+      (m.ready ? '' : '<p class="small soft">Log ' + m.need + ' more night' + (m.need === 1 ? '' : 's') + ' for a personal recommendation.</p>') + '</div>';
     html += '<button class="btn" data-act="bed">Going to bed</button>';
     if (last) {
       html += '<div class="card"><div class="row"><h2>Last night</h2><button class="link" data-tab-go="log">See log</button></div>' +
@@ -297,13 +343,21 @@
   }
 
   function vInsights() {
-    var d = done(), m = model();
+    var d = done(), p = plan();
+    var wakeLbl = minToLabel(wakeTargetMin()), bedLbl = minToLabel(p.bedMin);
+    var body;
+    if (p.src === 'model') {
+      body = 'Recommended by the team’s sleep model, which learns from your ' + p.n + ' logged nights, your recent sleep debt and how rested you felt. To wake up at ' + wakeLbl + ', aim for bed by ' + bedLbl + '.';
+    } else if (p.src === 'baseline') {
+      body = 'Couldn’t reach the sleep model, so this is the average time asleep on your ' + p.top + ' best-rated nights. To wake up at ' + wakeLbl + ', aim for bed by ' + bedLbl + '.';
+    } else {
+      body = 'Log ' + p.need + ' more night' + (p.need === 1 ? '' : 's') + ' and the sleep model will find your sweet spot. ' + p.n + ' logged so far.';
+    }
     var html = '<h1>Insights</h1>';
-    html += '<div class="card hi"><p class="eyebrow amber">Your sweet spot</p>' +
-      '<p class="big" style="font-size:44px">' + (m.ready ? fmtDur(m.hours * 60) : '—') + '</p>' +
-      '<p class="small soft">' + (m.ready
-        ? 'The average time asleep on your ' + m.top + ' best-rated nights. For a ' + minToLabel(wakeTargetMin()) + ' wake-up, aim for bed by ' + minToLabel(wakeTargetMin() - Math.round(m.hours * 12) * 5) + '.'
-        : 'Log ' + (MIN_NIGHTS - m.n) + ' more night' + (MIN_NIGHTS - m.n === 1 ? '' : 's') + ' to see your sweet spot. ' + m.n + ' logged so far.') + '</p></div>';
+    html += '<div class="card hi"><div class="row"><p class="eyebrow amber">Your sweet spot</p>' +
+      (p.src === 'model' ? '<span class="pill">Sleep model</span>' : '') + '</div>' +
+      '<p class="big" style="font-size:44px">' + (p.ready ? fmtDur(p.hours * 60) : '—') + '</p>' +
+      '<p class="small soft">' + body + '</p></div>';
     if (!d.length) return html;
     function bars(title, rows) {
       return '<div class="card"><h2>' + title + '</h2>' + rows.map(function (r) {
@@ -324,7 +378,7 @@
       { label: '1 snooze', test: function (s) { return s === 1; } },
       { label: '2 or more', test: function (s) { return s >= 2; } }
     ]));
-    html += '<div class="card"><h2>How this works</h2><p class="small soft" style="line-height:1.5">Each night records when you went to sleep, when you woke up, how many times you snoozed, and your 1 to 10 check-in. The recommendation is a simple baseline for now and will be replaced by the team’s model.</p></div>';
+    html += '<div class="card"><h2>How this works</h2><p class="small soft" style="line-height:1.5">Each night records when you went to sleep, when you woke up, how many times you snoozed, and your 1 to 10 check-in. Your sweet spot and tonight’s bedtime come from the team’s sleep model, which learns which amount of sleep leaves you most rested given your recent nights. Offline, the app falls back to the average of your best-rated nights. It’s an experimental model, not medical advice.</p></div>';
     return html;
   }
 
@@ -335,7 +389,7 @@
       '<div class="row"><span class="muted">Nights logged</span><b>' + done().length + '</b></div>' +
       '<div class="row"><span class="muted">Waiting to upload</span><b>' + pending + '</b></div>' +
       (pending ? '<button class="btn ghost" data-act="retry">Upload now</button>' : '') + '</div>' +
-      '<div class="card"><h2>Your data</h2><p class="small soft" style="line-height:1.5">Your nights are saved to the CS221 project team’s Google Sheet under your participant code, not your name. The team uses them to train the sleep model. Ask the team to delete your rows any time.</p></div>' +
+      '<div class="card"><h2>Your data</h2><p class="small soft" style="line-height:1.5">Your nights are saved to the CS221 project team’s server under your participant code, not your name. The team uses them to train the sleep model. Ask the team to delete your rows any time.</p></div>' +
       '<button class="btn dark" data-act="refresh">Refresh from server</button>' +
       '<button class="link" data-act="switchCode">Use a different participant code</button>';
   }
@@ -343,11 +397,10 @@
   // ---------- render ----------
   function render() {
     var html, showNav = true;
-    if (!configured) { html = vSetup(); showNav = false; }
-    else if (!S.participant) { html = vJoin(); showNav = false; }
+    if (!S.participant) { html = vJoin(); showNav = false; }
     else if (S.checkin) { html = vCheckin(); showNav = false; }
     else html = ({ home: vHome, log: vLog, insights: vInsights, you: vYou })[S.tab]();
-    if (configured && S.participant && !S.checkin && (S.loadError || S.queue.length)) {
+    if (S.participant && !S.checkin && (S.loadError || S.queue.length)) {
       html = '<div class="notice">' + (S.queue.length
         ? S.queue.length + ' change' + (S.queue.length === 1 ? '' : 's') + ' saved on this phone, waiting to upload. They’ll send when you’re online.'
         : 'Couldn’t reach the server. Showing nights saved on this phone.') + '</div>' + html;
@@ -406,7 +459,7 @@
       case 'refresh': loadNights(); return;
       case 'switchCode':
         if (S.queue.length) { toast('Upload pending changes first.'); return; }
-        S.participant = null; S.nights = []; lsDel(LS.participant); lsDel(LS.cache); render(); return;
+        S.participant = null; S.nights = []; S.rec = null; lsDel(LS.participant); lsDel(LS.cache); render(); return;
     }
   }
 
@@ -430,7 +483,7 @@
     var t = e.target;
     if (t.id === 'bedIn') { S.checkin.bedAt = fromLocalInput(t.value); render(); }
     if (t.id === 'wakeIn') { S.checkin.wakeAt = fromLocalInput(t.value); render(); }
-    if (t.id === 'wakeT' && t.value) { S.wakeTarget = t.value; lsSet(LS.wake, t.value); render(); }
+    if (t.id === 'wakeT' && t.value) { S.wakeTarget = t.value; lsSet(LS.wake, t.value); render(); loadRecommendation(); }
   });
   window.addEventListener('online', function () { flushQueue().then(render); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { flushQueue().then(render); } });
